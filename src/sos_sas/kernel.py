@@ -26,11 +26,14 @@ import argparse
 import tempfile
 from sos.utils import env
 
-from saspy.sasiostdio import SASsessionSTDIO
+try:
+    from saspy.sasstdio import SASsessionSTDIO as SASsession
+except:
+    from saspy.sasioiom import SASsessionIOM as SASsession
 
 from io import BytesIO
 
-class sos_SAS(SASsessionSTDIO):
+class sos_SAS(SASsession):
     supported_kernels = {'SAS': ['sas']}
     background_color = '#9CD4F9'
     options = {}
