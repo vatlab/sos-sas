@@ -37,6 +37,7 @@ class sos_SAS(SASsession):
     supported_kernels = {'SAS': ['sas']}
     background_color = '#9CD4F9'
     options = {}
+    cd_command = "x 'cd {dir}';"
 
     def __init__(self, sos_kernel, kernel_name='sas'):
         self.sos_kernel = sos_kernel
