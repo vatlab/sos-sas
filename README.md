@@ -1,4 +1,5 @@
 [![PyPI version](https://badge.fury.io/py/sos-sas.svg)](https://badge.fury.io/py/sos-sas)
+[![Build Status](https://travis-ci.org/vatlab/sos-sas.svg?branch=master)](https://travis-ci.org/vatlab/sos-sas)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/f2268ed69789414b84fc88c87ffb3c06)](https://www.codacy.com/app/BoPeng/sos-sas?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=vatlab/sos-sas&amp;utm_campaign=Badge_Grade)
 
 # sos-sas
