@@ -9,12 +9,6 @@ from ipykernel.tests.utils import execute, wait_for_idle
 from sos_notebook.test_utils import sos_kernel
 
 class TestSASKernel(unittest.TestCase):
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        os.chdir(self.olddir)
-
     def testSoSKernel(self):
         # Python -> R
         with sos_kernel() as kc:
