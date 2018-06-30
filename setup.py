@@ -40,7 +40,6 @@ setup(name = "sos-sas",
     install_requires=[
           'sos>=0.9.12.0',
           'sos-notebook>=0.9.11.6',
-          'sas_kernel',
           'saspy',
           'sas7bdat',
       ],
