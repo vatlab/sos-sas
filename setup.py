@@ -25,7 +25,7 @@ setup(name = "sos-sas",
     classifiers = [
         'Development Status :: 4 - Beta',
         'Environment :: Console',
-        'License :: OSI Approved :: BSD',
+        'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Operating System :: POSIX :: Linux',
         'Operating System :: MacOS :: MacOS X',
@@ -38,8 +38,8 @@ setup(name = "sos-sas",
     packages = find_packages('src'),
     package_dir = {'': 'src'},
     install_requires=[
-          'sos>=0.9.12.0',
-          'sos-notebook>=0.9.11.6',
+          'sos>=0.18.0',
+          'sos-notebook>=0.18.0',
           'saspy',
           'sas7bdat',
       ],
@@ -48,4 +48,3 @@ setup(name = "sos-sas",
 SAS = sos_sas.kernel:sos_SAS
 '''
 )
-
