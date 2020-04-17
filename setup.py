@@ -42,6 +42,7 @@ setup(
         'sos>=0.21.5',
         'sos-notebook>=0.21.7',
         'saspy==3.3.5',
+        'sas-kernel==2.2.0',
         'sas7bdat',
     ],
     entry_points='''

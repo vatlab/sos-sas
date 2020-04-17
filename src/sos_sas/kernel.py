@@ -118,7 +118,9 @@ class sos_SAS(SASsession):
             params += ["-i", self.sascfg.identity]
 
         params += [self.sascfg.host + ':' + filename, dest_file]
-        env.log_to_file('KERNEL', f'Copy .sas2bdat file with commands "{" ".join(params)}"')
+        env.log_to_file(
+            'KERNEL',
+            f'Copy .sas2bdat file with commands "{" ".join(params)}"')
 
         subprocess.call(params)
         if not os.path.isfile(dest_file):
@@ -126,6 +128,19 @@ class sos_SAS(SASsession):
                 f'Failed to retrieve {filename} from {self.sascfg.host} with command {" ".join(params)}'
             )
         return dest_file
+
+    def get_path_names(self, LST, temp_name):
+        path_name = LST.split(temp_name + '=')[-1].split('<')[0]
+        if not path_name.startswith('('):
+            # if this is a single path
+            return [path_name]
+        # this is something like the following:
+        #
+        # temp_name=( '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/nls/en/sascfg'
+        # '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/nls/en/sascfg'
+        # '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/sashelp' )
+        return LST.split(temp_name +
+                         '=(')[-1].split(')')[0].split('&#39;')[1::2][-1::-1]
 
     def put_vars(self, items, to_kernel=None):
         res = {}
@@ -135,7 +150,9 @@ class sos_SAS(SASsession):
                 # the directory will be created if it does not exist
                 if '.' in item:
                     if item.count('.') > 1:
-                        raise ValueError(f'Name of SAS datasets can only be name or libname.name: {item} specified')
+                        raise ValueError(
+                            f'Name of SAS datasets can only be name or libname.name: {item} specified'
+                        )
                     libname, data = item.split('.', 1)
                 else:
                     libname = 'work'
@@ -147,30 +164,51 @@ class sos_SAS(SASsession):
                 # run the code to save file
                 resp = self.submit()
                 # let us get the path to the library
-                env.log_to_file('KERNEL', resp['LST'])
-                path_name = resp['LST'].split(temp_name +
-                                              '=')[-1].split('<')[0]
+                path_names = self.get_path_names(resp['LST'], temp_name)
+                env.log_to_file('KERNEL', f'Trying paths {path_names}')
 
-                data_file = os.path.join(path_name,
-                                          f'{data.lower()}.sas7bdat')
+                ok = False
+                for path_name in path_names:
+                    try:
+                        data_file = os.path.join(path_name,
+                                                 f'{data.lower()}.sas7bdat')
 
-                if os.path.isfile(data_file):
-                    # share the same file system
-                    df = pd.read_sas(saved_file, encoding='utf-8')
-                    res[item.replace('.', '_')] = df
-                elif sas_config.mode == 'SSH':
-                    # SSH, let us copy the file.
-                    local_data_file = self.scp_tmp_file(data_file, temp_name)
-                    df = pd.read_sas(local_data_file, encoding='utf-8')
-                    res[item.replace('.', '_')] = df
-                    os.remove(local_data_file)
-                else:
+                        if os.path.isfile(data_file):
+                            # share the same file system
+                            try:
+                                df = pd.read_sas(data_file, encoding='utf-8')
+                            except UnicodeDecodeError:
+                                df = pd.read_sas(data_file)
+                            res[item.replace('.', '_')] = df
+                            ok = True
+                            break
+                        elif sas_config.mode == 'SSH':
+                            # SSH, let us copy the file.
+                            local_data_file = self.scp_tmp_file(
+                                data_file, temp_name)
+                            # the file could be binary, or utf-8 encoded
+                            try:
+                                df = pd.read_sas(local_data_file,
+                                                 encoding='utf-8')
+                            except UnicodeDecodeError:
+                                df = pd.read_sas(local_data_file)
+                            res[item.replace('.', '_')] = df
+                            os.remove(local_data_file)
+                            ok = True
+                            break
+                        else:
+                            # try the next path
+                            continue
+                    except Exception as e:
+                        env.log_to_file(str(e))
+                        continue
+                #
+                if not ok:
                     self.sos_kernel.warn(
-                        '''Failed to access saved file. This version of sos-sas only
+                        '''Failed to access SAS data file. This version of sos-sas only
                         support retrieving datasets from SAS servers that share the
-                        same file system as the Jupyter server, or with SSH connection.'''
-                    )
-                    continue
+                        same file system as the Jupyter server, or accessed with a SSH
+                        connection.''')
             except Exception as e:
                 self.sos_kernel.warn(
                     'Failed to get dataset {} from SAS: {}'.format(item, e))
