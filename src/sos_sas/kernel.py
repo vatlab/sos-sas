@@ -4,6 +4,8 @@
 # Distributed under the terms of the 3-clause BSD License.
 
 import os
+import sys
+import importlib
 import pandas as pd
 import argparse
 import subprocess
@@ -22,17 +24,44 @@ from saspy.sasiostdio import SASconfigSTDIO
 
 # However, we still need to know the type of connections to
 # make some choices
+from saspy import list_configs
 from saspy.sasbase import SASconfig
-sas_config = SASconfig()
 
 from io import BytesIO
+
+# #5
+# users might specify multiple configuration files and we will have
+# to specify one during SASconfig() to avoid being asked for config name
+
+
+def get_first_config_name():
+    config_files = list_configs()
+    if len(config_files) == 0:
+        # no configration is found
+        env.log_to_file('No saspy configuration is found')
+        return ''
+    for config_file in config_files:
+        try:
+            path, module = os.path.split(config_file)
+            sys.path.insert(0, path)
+            cfg = importlib.import_module(os.path.splitext(module)[0])
+            configs = getattr(cfg, "SAS_config_names", [])
+            if configs:
+                return configs[0]
+        except Exception as e:
+            env.log_to_file(f'Failed to load sas configuration {config_file}: {e}')
+            continue
+    return ''
+
+
+sas_config = SASconfig(cfgname=get_first_config_name())
 
 
 class sos_SAS(SASsession):
     supported_kernels = {'SAS': ['sas']}
     background_color = '#9CD4F9'
     options = {}
-    cd_command = "x 'cd {dir}';"
+    cd_command = "%put %sysfunc(dlgcdir('{dir}'));"
 
     def __init__(self, sos_kernel, kernel_name='sas'):
         self.sos_kernel = sos_kernel
