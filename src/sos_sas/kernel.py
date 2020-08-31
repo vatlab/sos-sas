@@ -51,6 +51,8 @@ def get_first_config_name():
         except Exception as e:
             env.log_to_file(f'Failed to load sas configuration {config_file}: {e}')
             continue
+        finally:
+            sys.path.pop(0)
     return ''
 
 
