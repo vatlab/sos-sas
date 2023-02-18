@@ -3,31 +3,29 @@
 # Copyright (c) Bo Peng and the University of Texas MD Anderson Cancer Center
 # Distributed under the terms of the 3-clause BSD License.
 
-import os
-import sys
-import importlib
-import pandas as pd
 import argparse
+import importlib
+import os
 import subprocess
+import sys
 import uuid
+from io import BytesIO
+
+import pandas as pd
+# However, we still need to know the type of connections to
+# make some choices
+from saspy import list_configs
+from saspy.sasbase import SASconfig
+# However, because we are using the source code and faking
+# some other pieces, we have to lock down to particular versions
+# of sospy.
+from saspy.sasiostdio import SASconfigSTDIO
+from saspy.sasiostdio import SASsessionSTDIO as SASsession
 from sos.utils import env
 
 # it does not matter what connection method is actually used
 # as only borrow code from the SASession to run some "fake"
 # submissions. Real submission will be carried out by sos.
-
-# However, because we are using the source code and faking
-# some other pieces, we have to lock down to particular versions
-# of sospy.
-from saspy.sasiostdio import SASsessionSTDIO as SASsession
-from saspy.sasiostdio import SASconfigSTDIO
-
-# However, we still need to know the type of connections to
-# make some choices
-from saspy import list_configs
-from saspy.sasbase import SASconfig
-
-from io import BytesIO
 
 # #5
 # users might specify multiple configuration files and we will have
@@ -99,38 +97,30 @@ class sos_SAS(SASsession):
 
         sas_code += code
 
-        env.log_to_file('Executing in SAS Kernel\n{}'.format(sas_code))
+        env.log_to_file(f'Executing in SAS Kernel\n{sas_code}')
 
         # the sas-kernel only has execute_result, nothing else
-        response = self.sos_kernel.get_response(sas_code, ('execute_result', ),
-                                                name=('data', ))
-        res = [
-            x[1]['data']['text/html'] for x in response
-            if x[0] == 'execute_result'
-        ]
+        response = self.sos_kernel.get_response(sas_code, ('execute_result',), name=('data',))
+        res = [x[1]['data']['text/html'] for x in response if x[0] == 'execute_result']
         res = res[0] if res else ''
         env.log_to_file(f'RESPONSE\n {response}')
 
         return {'LOG': res, 'LST': res}
 
-    def get_vars(self, names):
+    async def get_vars(self, names, as_var=None):
         #
         # get variables with names from env.sos_dict and create
         # them in the subkernel. The current kernel should be SAS
         for name in names:
             if not isinstance(env.sos_dict[name], pd.DataFrame):
                 if self.sos_kernel._debug_mode:
-                    self.sos_kernel.warn(
-                        'Cannot transfer a non DataFrame object {} of type {} to SAS'
-                        .format(name, env.sos_dict[name].__class__.__name__))
+                    self.sos_kernel.warn(f'Cannot transfer a non DataFrame object {name} of type {env.sos_dict[name].__class__.__name__} to SAS')
                 continue
             # sas cannot handle columns with non-string header
-            data = env.sos_dict[name].rename(
-                columns={x: str(x)
-                         for x in env.sos_dict[name].columns})
+            data = env.sos_dict[name].rename(columns={x: str(x) for x in env.sos_dict[name].columns})
             # convert dataframe to SAS, this function will call self.submit,
             # which we have changed to submit to the underlying SAS kernel.
-            self.dataframe2sasdata(data, name, "")
+            self.dataframe2sasdata(data, as_var if as_var else name, "")
 
     def scp_tmp_file(self, filename, temp_name):
         pgm = self.sascfg.ssh.replace('ssh', 'scp')
@@ -149,15 +139,11 @@ class sos_SAS(SASsession):
             params += ["-i", self.sascfg.identity]
 
         params += [self.sascfg.host + ':' + filename, dest_file]
-        env.log_to_file(
-            'KERNEL',
-            f'Copy .sas2bdat file with commands "{" ".join(params)}"')
+        env.log_to_file('KERNEL', f'Copy .sas2bdat file with commands "{" ".join(params)}"')
 
         subprocess.call(params)
         if not os.path.isfile(dest_file):
-            raise RuntimeError(
-                f'Failed to retrieve {filename} from {self.sascfg.host} with command {" ".join(params)}'
-            )
+            raise RuntimeError(f'Failed to retrieve {filename} from {self.sascfg.host} with command {" ".join(params)}')
         return dest_file
 
     def get_path_names(self, LST, temp_name):
@@ -170,20 +156,17 @@ class sos_SAS(SASsession):
         # temp_name=( '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/nls/en/sascfg'
         # '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/nls/en/sascfg'
         # '/export/tps/local/depot/sas-9.4/misc/sas-9.4/SASFoundation/9.4/sashelp' )
-        return LST.split(temp_name +
-                         '=(')[-1].split(')')[0].split('&#39;')[1::2][-1::-1]
+        return LST.split(temp_name + '=(')[-1].split(')')[0].split('&#39;')[1::2][-1::-1]
 
-    def put_vars(self, items, to_kernel=None):
+    def put_vars(self, items, to_kernel=None, as_var=None):
         res = {}
-        for idx, item in enumerate(items):
+        for _, item in enumerate(items):
             temp_name = uuid.uuid4().hex
             try:
                 # the directory will be created if it does not exist
                 if '.' in item:
                     if item.count('.') > 1:
-                        raise ValueError(
-                            f'Name of SAS datasets can only be name or libname.name: {item} specified'
-                        )
+                        raise ValueError(f'Name of SAS datasets can only be name or libname.name: {item} specified')
                     libname, data = item.split('.', 1)
                 else:
                     libname = 'work'
@@ -201,8 +184,7 @@ class sos_SAS(SASsession):
                 ok = False
                 for path_name in path_names:
                     try:
-                        data_file = os.path.join(path_name,
-                                                 f'{data.lower()}.sas7bdat')
+                        data_file = os.path.join(path_name, f'{data.lower()}.sas7bdat')
 
                         if os.path.isfile(data_file):
                             # share the same file system
@@ -210,39 +192,33 @@ class sos_SAS(SASsession):
                                 df = pd.read_sas(data_file, encoding='utf-8')
                             except UnicodeDecodeError:
                                 df = pd.read_sas(data_file)
-                            res[item.replace('.', '_')] = df
+                            res[as_var if as_var else item.replace('.', '_')] = df
                             ok = True
                             break
-                        elif sas_config.mode == 'SSH':
+                        if sas_config.mode == 'SSH':
                             # SSH, let us copy the file.
-                            local_data_file = self.scp_tmp_file(
-                                data_file, temp_name)
+                            local_data_file = self.scp_tmp_file(data_file, temp_name)
                             # the file could be binary, or utf-8 encoded
                             try:
-                                df = pd.read_sas(local_data_file,
-                                                 encoding='utf-8')
+                                df = pd.read_sas(local_data_file, encoding='utf-8')
                             except UnicodeDecodeError:
                                 df = pd.read_sas(local_data_file)
-                            res[item.replace('.', '_')] = df
+                            res[as_var if as_var else item.replace('.', '_')] = df
                             os.remove(local_data_file)
                             ok = True
                             break
-                        else:
-                            # try the next path
-                            continue
+                        continue
                     except Exception as e:
                         env.log_to_file(str(e))
                         continue
                 #
                 if not ok:
-                    self.sos_kernel.warn(
-                        '''Failed to access SAS data file. This version of sos-sas only
+                    self.sos_kernel.warn('''Failed to access SAS data file. This version of sos-sas only
                         support retrieving datasets from SAS servers that share the
                         same file system as the Jupyter server, or accessed with a SSH
                         connection.''')
             except Exception as e:
-                self.sos_kernel.warn(
-                    'Failed to get dataset {} from SAS: {}'.format(item, e))
+                self.sos_kernel.warn(f'Failed to get dataset {item} from SAS: {e}')
         return res
 
     def parse_response(self, html):
@@ -251,11 +227,9 @@ class sos_SAS(SASsession):
         LST = ''
         for line in html.split('</span>'):
             if 'class="err"' in line:
-                LOG += line.replace('<br>', '\n').replace(
-                    '<span class="err">', '') + ' '
+                LOG += line.replace('<br>', '\n').replace('<span class="err">', '') + ' '
             elif 'class="s"' in line:
-                LST += line.replace('<br>', '\n').replace(
-                    '<span class="s">', '') + ' '
+                LST += line.replace('<br>', '\n').replace('<span class="s">', '') + ' '
         return {'LOG': LOG, 'LST': LST}
 
     def sessioninfo(self):
@@ -264,6 +238,5 @@ class sos_SAS(SASsession):
 PROC PRODUCT_STATUS;
 run;
 '''
-        response = self.sos_kernel.get_response(
-            sas_code, ('execute_result', ))[0][1]['data']['text/html']
+        response = self.sos_kernel.get_response(sas_code, ('execute_result',))[0][1]['data']['text/html']
         return self.parse_response(response)['LOG']

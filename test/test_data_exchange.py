@@ -1,6 +1,8 @@
 
-from sos_notebook.test_utils import NotebookTest
 import random
+
+from sos_notebook.test_utils import NotebookTest
+
 
 class TestDataExchange(NotebookTest):
     def test_get_data_in_lib_from_SAS(self, notebook):

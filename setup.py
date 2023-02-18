@@ -40,7 +40,7 @@ setup(
     package_dir={'': 'src'},
     install_requires=[
         'sos>=0.21.5',
-        'sos-notebook>=0.21.7',
+        'sos-notebook>=0.24.0',
         'saspy==3.3.5',
         'sas-kernel==2.2.0',
         'sas7bdat',
