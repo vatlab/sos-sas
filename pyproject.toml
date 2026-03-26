@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sos-sas"
-version = "0.1.6"
+version = "0.20.1"
 description = "SoS Notebook extension for SAS"
 readme = "README.md"
 requires-python = ">=3.8"
